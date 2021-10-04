@@ -12,4 +12,9 @@ repositories {
 
 dependencies {
     implementation(kotlin("stdlib"))
+    implementation("com.xenomachina:kotlin-argparser:2.0.7")
+    implementation("com.google.code.gson:gson:2.8.8")
+
+    implementation("org.ow2.asm:asm:9.2")
+    implementation("org.ow2.asm:asm-commons:9.2")
 }
