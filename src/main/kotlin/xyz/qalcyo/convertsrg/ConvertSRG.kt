@@ -89,7 +89,7 @@ fun convertOldSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: Stri
         friendlyMethods[split[0]] = split[1]
     }
 
-    val packages = mutableMapOf<String, PackageType>()
+    val classes = mutableMapOf<String, ClassType>()
 
     println("Mapping OBF -> SRG")
     for (line in joined.lines()) {
@@ -99,42 +99,28 @@ fun convertOldSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: Stri
         val split = trimmed.split(' ')
 
         when (type) {
-            SrgType.Package -> packages[split[0]] = PackageType(split[1])
-            SrgType.Class -> {
-                val obfSplit = split[0].split('/').toMutableList()
-                val pkg =
-                    if (obfSplit.size == 1) "."
-                    else obfSplit.removeLast().run { obfSplit.joinToString(separator = "/") }
+            SrgType.Class ->
+                classes[split[0]] = ClassType(split[1].substringAfterLast('/'), split[1].substringBeforeLast('/'))
 
-                packages[pkg]!!.classes[obfSplit.last()] = ClassType(split[1].substringAfterLast('/'))
-            }
             SrgType.Field -> {
                 val obfSplit = split[0].split('/')
                 val className = obfSplit[0]
                 val obfFieldName = obfSplit.last()
                 val fieldName = split[1].substringAfterLast('/')
 
-                for ((obfPkgName, pkg) in packages) {
-                    val clazz = pkg.classes[className] ?: continue
-
-                    val classReader = try {
-                        ClassReader(mergedJar.getInputStream(mergedJar.getJarEntry("${if (obfPkgName == ".") "" else "$obfPkgName."}$className.class")))
-                    } catch (e: NullPointerException) {
-                        continue
-                    }
-                    val classNode = ClassNode()
-                    classReader.accept(classNode, 0)
-                    val fieldType = convertDescriptorToType(classNode.fields.find { it.name == obfFieldName }!!.desc) {
-                        for ((_, fieldPkg) in packages) {
-                            val returnClass = fieldPkg.classes[it] ?: continue
-                            return@convertDescriptorToType returnClass.name
-                        }
-                        it
-                    }
-
-                    clazz.fields[obfFieldName] = Field(friendlyFields[fieldName] ?: fieldName, fieldType)
-                    break
+                val classReader = try {
+                    ClassReader(mergedJar.getInputStream(mergedJar.getJarEntry("$className.class")))
+                } catch (e: NullPointerException) {
+                    continue
                 }
+                val node = ClassNode()
+                classReader.accept(node, 0)
+                val fieldType = convertDescriptorToType(node.fields.find { it.name == obfFieldName }!!.desc) {
+                    val clazz = classes[it] ?: return@convertDescriptorToType it
+                    "${clazz.pkg.replace('/', '.')}.${clazz.name}"
+                }
+
+                classes[className]!!.fields[obfFieldName] = Field(friendlyFields[fieldName] ?: fieldName, fieldType)
             }
             SrgType.Method -> {
 
@@ -144,12 +130,10 @@ fun convertOldSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: Stri
 
     println("Converting to Proguard format!")
     val builder = StringBuilder()
-    for ((obfPkg, pkg) in packages) {
-        for ((obfClass, clazz) in pkg.classes) {
-            builder.appendLine("${pkg.name.replace('/', '.')}.${clazz.name} -> $obfClass:")
-            for ((obfField, field) in clazz.fields) {
-                builder.appendLine("    ${field.type} ${field.name} -> $obfField")
-            }
+    for ((obfClass, clazz) in classes) {
+        builder.appendLine("${clazz.pkg.replace('/', '.')}.${clazz.name} -> $obfClass:")
+        for ((obfField, field) in clazz.fields) {
+            builder.appendLine("    ${field.type} ${field.name} -> $obfField")
         }
     }
 
