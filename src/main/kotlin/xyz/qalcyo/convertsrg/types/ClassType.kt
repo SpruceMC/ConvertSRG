@@ -5,5 +5,5 @@ class ClassType(
     val pkg: String,
 ) {
     val fields = mutableMapOf<String, Field>()
-    val methods = mutableMapOf<String, Method>()
+    val methods = mutableListOf<Method>()
 }

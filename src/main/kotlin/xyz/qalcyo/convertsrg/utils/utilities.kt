@@ -2,6 +2,7 @@ package xyz.qalcyo.convertsrg.utils
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
+import xyz.qalcyo.convertsrg.types.ClassType
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -83,7 +84,19 @@ fun convertDescriptorToType(desc: String, modifier: (String) -> String = { it })
         "C" -> "char"
         "D" -> "double"
         "J" -> "long"
+        "V" -> "void"
         else -> modifier(noArray.substring(1 until noArray.length - 1))
     } + "[]".repeat(arrayDim)
+}
+
+fun String.withinBrackets(depth: Int = 0): String {
+    return Regex("\\(([^)]+)\\)").find(this)!!.groupValues[depth]
+}
+
+fun getMcpName(obf: String, classes: Map<String, ClassType>): String {
+    val clazz = classes[obf]
+
+    return if (clazz != null) "${clazz.pkg.replace('/', '.')}.${clazz.name}"
+        else obf
 }
 

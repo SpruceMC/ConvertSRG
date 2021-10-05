@@ -2,19 +2,16 @@ package xyz.qalcyo.convertsrg
 
 import com.google.gson.JsonObject
 import org.objectweb.asm.ClassReader
+import org.objectweb.asm.Type
 import org.objectweb.asm.tree.ClassNode
 import xyz.qalcyo.convertsrg.types.ClassType
 import xyz.qalcyo.convertsrg.types.Field
-import xyz.qalcyo.convertsrg.types.PackageType
+import xyz.qalcyo.convertsrg.types.Method
 import xyz.qalcyo.convertsrg.utils.*
 import java.io.File
-import java.io.FileOutputStream
-import java.lang.Exception
 import java.lang.NullPointerException
 import java.net.URL
-import java.net.URLClassLoader
 import java.util.jar.JarFile
-import java.util.zip.ZipOutputStream
 
 fun convertSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: String): String {
     val versionNum = convertVersionStringToInt(minecraftVersion)
@@ -116,14 +113,27 @@ fun convertOldSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: Stri
                 val node = ClassNode()
                 classReader.accept(node, 0)
                 val fieldType = convertDescriptorToType(node.fields.find { it.name == obfFieldName }!!.desc) {
-                    val clazz = classes[it] ?: return@convertDescriptorToType it
-                    "${clazz.pkg.replace('/', '.')}.${clazz.name}"
+                    getMcpName(it, classes)
                 }
 
                 classes[className]!!.fields[obfFieldName] = Field(friendlyFields[fieldName] ?: fieldName, fieldType)
             }
             SrgType.Method -> {
+                val obfSplit = split[0].split('/')
+                val obfClassName = obfSplit[0]
+                val obfMethodName = obfSplit.last()
+                val srgMethodName = split[2].split('/').last()
+                val obfParams = Type.getArgumentTypes(split[1]).map { it.className }
+                val obfReturnValue = Type.getReturnType(split[1]).className
 
+                val methodName = friendlyMethods[srgMethodName] ?: srgMethodName
+                val params = obfParams.map {
+                    getMcpName(it, classes)
+                }
+                val returnValue = getMcpName(obfReturnValue, classes)
+
+                println(split[0])
+                classes[obfClassName]?.methods?.add(Method(methodName, obfMethodName, returnValue, params))
             }
         }
     }
@@ -134,6 +144,9 @@ fun convertOldSrg(minecraftVersion: String, mcpVersion: String, mcpChannel: Stri
         builder.appendLine("${clazz.pkg.replace('/', '.')}.${clazz.name} -> $obfClass:")
         for ((obfField, field) in clazz.fields) {
             builder.appendLine("    ${field.type} ${field.name} -> $obfField")
+        }
+        for (method in clazz.methods) {
+            builder.appendLine("    ${method.returnValue} ${method.name}(${method.params.joinToString(", ")}) -> ${method.obfName}")
         }
     }
 
